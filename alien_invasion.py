@@ -2,6 +2,8 @@ import sys
 
 from random import randint
 
+from time import sleep
+
 import pygame
 
 from settings import Settings
@@ -13,6 +15,10 @@ from bullet import Bullet
 from aliens import Alien
 
 from stars import Star
+
+from stars_bigger import StarBigger
+
+from game_stats import GameStats
 
 
 class AlienInvasion:
@@ -27,24 +33,26 @@ class AlienInvasion:
         self.settings.screen_height = self.screen.get_rect().height
         """Ship copy"""
         self.ship = Ship(self)
-        self.star = Star(self)
         """Bullets and aliens groups"""
         self.bullets = pygame.sprite.Group()
         self.aliens = pygame.sprite.Group()
         self._create_fleet()
+        self.stats = GameStats(self)
         pygame.display.set_caption("Alien Invasion")
         self.stars = pygame.sprite.Group()
+        self.stars_ = pygame.sprite.Group()
+        self._create_bigger_star_bg()
         self._create_star_bg()
 
     def run_game(self):
         """Run game"""
         while True:
             self._check_events()
-            self.ship.update()
-            self._update_bullets()
-            print(len(self.bullets))
+            if self.stats.game_active:
+                self.ship.update()
+                self._update_bullets()
+                self._update_aliens()
             self.update_screen()
-#            self.star.blit(self.star, (500, 700))
 
     def _check_events(self):
         for event in pygame.event.get():
@@ -60,6 +68,7 @@ class AlienInvasion:
         """Put 'stars.draw' upper to draw stars behind of ship and aliens"""
         """Move 'stars.draw' lower to draw stars in front of ship and aliens"""
         self.stars.draw(self.screen)
+        self.stars_.draw(self.screen)
         self.ship.blitme()
         for bullet in self.bullets.sprites():
             bullet.draw_bullet()
@@ -96,6 +105,14 @@ class AlienInvasion:
         for bullet in self.bullets.copy():
             if bullet.rect.bottom <= 0:
                 self.bullets.remove(bullet)
+        self._check_bullet_alien_collision()
+
+    def _check_bullet_alien_collision(self):
+        """Aliens and bullets destruction"""
+        collisions = pygame.sprite.groupcollide(self.bullets, self.aliens, True, True)
+        if not self.aliens:
+            self.bullets.empty()
+            self._create_fleet()
 
     def _create_fleet(self):
         """Creating an alien fleet"""
@@ -104,7 +121,7 @@ class AlienInvasion:
         available_space_x = self.settings.screen_width - (2 * alien_width)
         number_aliens_x = available_space_x // (2 * alien_width)
         ship_height = self.ship.rect.height
-        available_space_y = (self.settings.screen_height - (3 * alien_height) - ship_height)
+        available_space_y = (self.settings.screen_height - (40 * alien_height) - ship_height)
         number_rows = available_space_y // (2 * alien_height)
 
         """First row of aliens"""
@@ -121,13 +138,25 @@ class AlienInvasion:
         alien.rect.y = alien.rect.height + 2 * alien.rect.height * row_number
         self.aliens.add(alien)
 
+    def _check_fleet_edges(self):
+        """Reacting when alien reaches edge of the screen"""
+        for alien in self.aliens.sprites():
+            if alien._check_edges():
+                self.change_fleet_direction()
+                break
+
+    def change_fleet_direction(self):
+        for alien in self.aliens.sprites():
+            alien.rect.y += self.settings.fleet_drop_speed
+        self.settings.fleet_direction *= -1
+
     def _create_star_bg(self):
         """Creating stars grid"""
         star = Star(self)
         star_width, star_height = star.rect.size
-        available_space_x = self.settings.screen_width - star_width
-        number_stars_x = available_space_x // (2 * star_width)
-        available_space_y = self.settings.screen_height - (2 * star_height)
+#        available_space_x = self.settings.screen_width
+        number_stars_x = randint(1, 300)
+        available_space_y = self.settings.screen_height + (2 * star_height)
         number_rows = available_space_y // (2 * star_height)
 
         for row_number in range(number_rows):
@@ -138,13 +167,68 @@ class AlienInvasion:
         """Creating one star in a row"""
         star = Star(self)
         star_width, star_height = star.rect.size
-        star.rect.x = star_width + 8 * star_width * star_number
-        star.rect.y = star.rect.height + 8 * star.rect.height * row_number
+        star.rect.x = star_width + 12 * star_width * star_number
+        star.rect.y = star.rect.height + 14 * star.rect.height * row_number
 
-        star.rect.x += randint(-1, 20)
-        star.rect.y += randint(-50, 15)
+        star.rect.x += randint(-10, 29)
+        star.rect.y += randint(-50, 39)
 
         self.stars.add(star)
+
+    def _create_bigger_star_bg(self):
+        """Creating stars grid"""
+        star_ = StarBigger(self)
+        star__width, star__height = star_.rect.size
+#        available_space__x = self.settings.screen_width
+        number_stars__x = randint(1, 150)
+        available_space__y = self.settings.screen_height - (2 * star__height)
+        number__rows = available_space__y // (2 * star__height)
+
+        for row__number in range(number__rows):
+            for star__number in range(number_stars__x):
+                self._create_star_bigger(star__number, row__number)
+
+    def _create_star_bigger(self, star__number, row__number):
+        """Creating one star in a row"""
+        star_ = StarBigger(self)
+        star__width, star__height = star_.rect.size
+        star_.rect.x = star__width + 10 * star__width * star__number
+        star_.rect.y = star_.rect.height + 20 * star_.rect.height * row__number
+
+        star_.rect.x += randint(-90, 20)
+        star_.rect.y += randint(-1, 700)
+
+        self.stars.add(star_)
+
+    def _update_aliens(self):
+        self._check_fleet_edges()
+        self.aliens.update()
+        if pygame.sprite.spritecollideany(self.ship, self.aliens):
+            self._ship_hit()
+        self._check_aliens_bottom()
+
+    def _ship_hit(self):
+        """Taking one life of the ship"""
+        if self.stats.ship_left > 0:
+            self.stats.ship_left -= 1
+            """Destruction of aliens and bullets after hitting the ship"""
+            self.aliens.empty()
+            self.bullets.empty()
+            """Creating fleet and ship"""
+            self._create_fleet()
+            self.ship.center_ship()
+            """Pause the game after collision"""
+            sleep(0.5)
+        else:
+            self.game_active = False
+
+    def _check_aliens_bottom(self):
+        """Checking aliens reaches the bottom"""
+        screen_rect = self.screen.get_rect()
+        for alien in self.aliens.sprites():
+            if alien.rect.bottom >= screen_rect.bottom:
+                self._ship_hit()
+                break
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 import pygame
 
 
-class Ship():
+class Ship:
     """Ship control"""
     def __init__(self, ai_game):
         """Ship and start position initialization"""
@@ -34,3 +34,8 @@ class Ship():
     def blitme(self):
         """Realtime ship position"""
         self.screen.blit(self.image, self.rect)
+
+    def center_ship(self):
+        """Creating ship after collision"""
+        self.rect.midbottom = self.screen_rect.midbottom
+        self.x = float(self.rect.x)
